@@ -131,3 +131,98 @@ http://192.168.56.1/hackable/uploads/fake.png?cmd=ls
 -Aplicar renombrado seguro y directorios sin ejecución.
 
 -Validar tamaño, estructura y contenido interno.
+
+
+
+# V-03 — Blind SQL Injection (Low)
+
+##  Clasificación Técnica
+- **OWASP Top 10:** A03:2021 – Injection  
+- **OWASP WSTG:** WSTG-INPV-05 — Testing for Blind SQL Injection  
+- **CWE:** CWE-89 — Improper Neutralization of Special Elements in SQL Commands  
+- **CVSS v3.1:** 8.2 (High)  
+- **Vector:** AV:N / AC:L / PR:L / UI:N / S:U / C:H / I:L / A:N  
+
+---
+
+##  Ubicación
+- **Módulo afectado:** SQL Injection (Blind)  
+- **URL:** `http://192.168.56.1/vulnerabilities/sqli_blind/`  
+- **Parámetro vulnerable:** `id`  
+- **Método:** GET  
+
+---
+
+##  Descripción técnica
+El parámetro `id` se concatena directamente en la consulta SQL sin sanitización, permitiendo que un atacante altere la lógica de la sentencia.
+
+Aunque el sistema **no muestra resultados visibles**, sí responde de manera distinta cuando la condición SQL es verdadera o falsa, permitiendo un ataque **boolean-based blind**.
+
+Esto habilita, entre otras técnicas:
+
+- Enumeración de columnas y tablas  
+- Extracción de datos carácter por carácter  
+- Compromiso completo de la base de datos  
+
+---
+
+##  Prueba de Concepto (PoC)
+
+### 1) Payload TRUE
+
+1' OR 1=1#
+
+ **Evidencia:**  
+![Payload TRUE](../evidencias/screenshots/Injection_Blind/payload_true.png)
+
+### Resultado:
+El servidor respondió:
+
+User ID exists in the database.
+
+Interpretación: **Condición TRUE** → Inyección exitosa.
+
+---
+
+### 2) Payload FALSE
+
+1' AND 1=2#
+
+**Evidencia:**  
+![Payload FALSE](../evidencias/screenshots/Injection_Blind/payload_false.png)
+
+### Resultado:
+
+User ID is MISSING from the database.
+
+Interpretación: **Condición FALSE** → Inyección confirmada.
+
+---
+
+### 3) Request técnica capturada en Burp
+
+ **Evidencia RAW:**  
+![Burp RAW](../evidencias/screenshots/Injection_Blind/request_en_burp(raw).png)
+
+---
+
+##  Impacto técnico
+La vulnerabilidad permite:
+
+- Confirmar la existencia de usuarios  
+- Extraer datos sin respuesta visible (blind extraction)  
+- Construir ataques automatizados  
+- Escalar a compromiso de la base de datos  
+
+En entornos reales, esta vulnerabilidad permite filtración total de datos sensibles.
+
+---
+
+##  Recomendaciones técnicas
+1. Implementar consultas parametrizadas (**Prepared Statements**).  
+2. Prohibir concatenación directa de parámetros.  
+3. Validación estricta del input del usuario.  
+4. Activar controles de firewall de aplicaciones (WAF).  
+5. Minimizar mensajes que revelen comportamientos booleanos.  
+
+
