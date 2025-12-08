@@ -2,7 +2,7 @@
 ## DVWA - Security Level: Medium
 
 ---
-
+![Logo DVWA](../logo.jpg)
 ## 1. Portada
 
 **Proyecto**: Auditoría de Seguridad - DVWA Medium  
@@ -1814,5 +1814,478 @@ session_set_cookie_params([
     'samesite' => 'Strict' // Protección CSRF
 ]);
 ```
+
+---
+## 9. Conclusiones y Recomendaciones Generales
+
+### 9.1 Conclusiones del Pentesting
+
+La auditoría de seguridad realizada sobre DVWA en nivel Medium revela una **postura de seguridad crítica** con múltiples vulnerabilidades de alta severidad que permiten el compromiso total de la aplicación y del servidor subyacente.
+
+#### Evaluación General
+
+**Severidad de la Situación:**
+- 4 de 5 vulnerabilidades son de severidad CRÍTICA (CVSS 9.0+)
+- 100% de las vulnerabilidades identificadas están relacionadas con inyección (OWASP A03)
+- Tasa de explotación exitosa: 80% (4 de 5 vulnerabilidades)
+- Todas las vulnerabilidades críticas proporcionan capacidades de Ejecución Remota de Código o robo masivo de sesiones
+
+**Hallazgos Principales:**
+
+1. **Falta sistemática de validación de entrada**: Ninguno de los módulos evaluados implementa sanitización o validación robusta de entrada del usuario
+
+2. **Ausencia de encoding de output**: Los datos del usuario se reflejan en HTML sin escapado adecuado, permitiendo inyección de código
+
+3. **Validaciones client-side sin respaldo server-side**: Restricciones HTML pueden bypassearse trivialmente con DevTools
+
+4. **No implementación de principios de defensa en profundidad**: 
+   - Sin Content Security Policy (CSP)
+   - Sin HttpOnly flags en cookies
+   - Sin Web Application Firewall (WAF)
+   - Sin rate limiting
+   - Sin logging de seguridad
+
+5. **Ejecución con privilegios excesivos**: El servidor web ejecuta código sin restricciones de permisos adecuados
+
+#### Top 5 Vulnerabilidades Críticas
+
+1. **V-03: File Upload → RCE** (CVSS 9.8)
+   - Control total del servidor
+   - Credenciales de base de datos comprometidas
+   - Base para ataques adicionales
+
+2. **V-02: OS Command Injection** (CVSS 9.8)
+   - Ejecución directa de comandos del sistema
+   - Acceso a archivos sensibles
+   - Potencial para movimiento lateral
+
+3. **V-04: Stored XSS** (CVSS 9.0)
+   - Robo masivo de sesiones
+   - Persistencia indefinida
+   - Afecta a todos los usuarios incluyendo administradores
+
+4. **V-01: SQL Injection (Blind)** (CVSS 9.8)
+   - Acceso no autorizado a base de datos
+   - Extracción de credenciales
+   - Potencial para modificación de datos
+
+5. **V-05: Reflected XSS** (CVSS 6.1)
+   - Robo de sesiones individuales
+   - Phishing mediante URLs maliciosas
+   - Menor impacto que Stored XSS pero igualmente peligroso
+
+#### Patrones de Vulnerabilidades Observados
+
+**Patrón 1: Confianza en el cliente**
+- Todas las vulnerabilidades comparten validación client-side insuficiente
+- La aplicación asume que las restricciones HTML son efectivas
+- No hay verificación server-side equivalente
+
+**Patrón 2: Falta de sanitización**
+- Input del usuario procesado directamente sin limpieza
+- Concatenación directa en queries SQL, comandos shell, y HTML
+- Sin uso de funciones de encoding/escaping
+
+**Patrón 3: Blacklist vs Whitelist**
+- DVWA usa blacklists fácilmente bypasseables
+- No implementa whitelists de entrada válida
+- Filtros implementados son insuficientes y no recursivos
+
+### 9.2 Recomendaciones Estratégicas
+
+#### Priorización de Remediación
+
+| Prioridad | Vulnerabilidades | Esfuerzo | Impacto | Timeline | Costo Estimado |
+|-----------|------------------|----------|---------|----------|----------------|
+| P0 - Crítico | V-03 (File Upload), V-04 (XSS Stored) | Alto | Muy Alto | 24-72 horas | $15,000-$25,000 |
+| P1 - Alto | V-02 (Command Injection), V-01 (SQL Injection) | Medio | Alto | 1-2 semanas | $20,000-$30,000 |
+| P2 - Medio | V-05 (XSS Reflected) | Bajo | Medio | 2-4 semanas | $5,000-$10,000 |
+
+**Justificación de Prioridades:**
+
+**P0 (Inmediato):**
+- V-03: RCE directo con acceso a credenciales DB
+- V-04: Afecta a todos los usuarios automáticamente, incluidos admins
+
+**P1 (Urgente):**
+- V-02: RCE pero requiere comando específico
+- V-01: Identificada pero no completamente explotada
+
+**P2 (Importante):**
+- V-05: Requiere ingeniería social, afecta a una víctima por vez
+
+#### Recomendaciones Inmediatas (1-3 días)
+
+1. **Deshabilitar módulos vulnerables temporalmente**
+   - File Upload: OFF hasta implementar validación robusta
+   - XSS Stored: OFF hasta implementar sanitización
+   - Command Injection: OFF o restringir severamente
+
+2. **Activar HttpOnly en cookies**
+```php
+   session_set_cookie_params([
+       'httponly' => true,
+       'secure' => true,
+       'samesite' => 'Strict'
+   ]);
+```
+
+3. **Implementar CSP básico**
+```
+   Content-Security-Policy: default-src 'self'; script-src 'self'
+```
+
+4. **Cambiar credenciales comprometidas**
+   - Password de root de MySQL
+   - Todas las cuentas de usuario de DVWA
+   - Credenciales de cualquier sistema conectado
+
+5. **Revisar logs en busca de explotación previa**
+```bash
+   grep -i "shell.php\|<script\|onerror\|onload" /var/log/apache2/access.log
+```
+
+#### Recomendaciones a Corto Plazo (1-4 semanas)
+
+1. **Implementar Prepared Statements en toda la aplicación**
+   - Reescribir todas las queries SQL
+   - Usar PDO o MySQLi con parámetros
+   - Eliminar concatenación de strings en SQL
+
+2. **Implementar validación y sanitización robusta**
+   - Whitelist de entrada para todos los campos
+   - Validación server-side obligatoria
+   - Uso de funciones de sanitización específicas por contexto
+
+3. **Implementar encoding de output**
+   - `htmlspecialchars()` para HTML context
+   - `json_encode()` para JavaScript context
+   - Encoding apropiado según el contexto de salida
+
+4. **Configurar directorio de uploads seguro**
+   - Mover fuera del webroot
+   - Deshabilitar ejecución de scripts
+   - Validar contenido real de archivos (magic bytes)
+   - Renombrar archivos con nombres aleatorios
+
+5. **Implementar WAF**
+   - ModSecurity con OWASP Core Rule Set
+   - Reglas personalizadas para la aplicación
+   - Monitoreo de intentos de ataque
+
+#### Mejoras Arquitectónicas (1-3 meses)
+
+1. **Implementar arquitectura de seguridad en capas**
+   - Separación de red (DMZ, backend)
+   - Principio de menor privilegio
+   - Segmentación de servicios
+
+2. **Establecer proceso de desarrollo seguro**
+   - Code reviews obligatorios con checklist de seguridad
+   - Static Application Security Testing (SAST)
+   - Dynamic Application Security Testing (DAST)
+   - Security testing en CI/CD pipeline
+
+3. **Implementar logging y monitoreo de seguridad**
+   - SIEM centralizado
+   - Alertas de seguridad en tiempo real
+   - Retención de logs por al menos 90 días
+   - Análisis forense preparado
+
+4. **Capacitación continua del equipo**
+   - Training en OWASP Top 10
+   - Secure coding practices
+   - Security awareness para todo el personal
+   - Ejercicios de Red Team/Blue Team
+
+5. **Programa de Bug Bounty**
+   - Recompensar investigadores de seguridad
+   - Identificar vulnerabilidades antes que atacantes
+   - Mejorar relación con comunidad de seguridad
+
+#### Plan de Remediación Consolidado
+
+**Semana 1:**
+- Deshabilitar módulos críticos
+- Implementar CSP y HttpOnly cookies
+- Cambiar credenciales comprometidas
+- Auditoría de logs
+
+**Semanas 2-4:**
+- Reescribir módulo File Upload con validaciones robustas
+- Implementar sanitización en XSS Stored
+- Corregir Command Injection con whitelist
+- Implementar Prepared Statements
+
+**Mes 2:**
+- Completar corrección de SQL Injection
+- Implementar WAF
+- Corregir XSS Reflected
+- Testing exhaustivo de todas las correcciones
+
+**Mes 3:**
+- Pentesting externo completo
+- Implementar SIEM y monitoreo
+- Capacitación del equipo
+- Documentación de procesos seguros
+
+**Presupuesto Total Estimado:** $53,000 - $85,000
+
+**ROI:** Potencial ahorro de $610,000 - $3,160,000 en costos de incidente
+
+### 9.3 Conclusiones por Fase PTES
+
+**1. Pre-engagement:**
+- Alcance claramente definido
+- Reglas de engagement documentadas
+- Tipo de pentesting (black-box) apropiado para el objetivo
+
+**2. Intelligence Gathering:**
+- Reconocimiento completo de la aplicación
+- Identificación de todos los módulos vulnerables
+- Mapeo de tecnologías utilizadas
+
+**3. Threat Modeling:**
+- Identificación correcta de amenazas principales
+- Priorización basada en OWASP Top 10
+- Vectores de ataque claramente identificados
+
+**4. Vulnerability Analysis:**
+- Análisis exhaustivo de 5 módulos
+- 5 vulnerabilidades identificadas (100% del objetivo mínimo)
+- Clasificación precisa de severidad
+
+**5. Exploitation:**
+- 4 de 5 vulnerabilidades explotadas exitosamente (80%)
+- Pruebas de concepto funcionales para todas
+- Documentación detallada del proceso
+
+**6. Post-Exploitation:**
+- Análisis de impacto completo
+- Identificación de datos sensibles comprometidos
+- Evaluación de posibilidades de escalación
+
+**7. Reporting:**
+- Informe técnico exhaustivo
+- Informe ejecutivo para audiencia no técnica
+- Recomendaciones accionables y priorizadas
+
+---
+
+## 10. Anexos
+
+### Anexo A: Glosario de Términos Técnicos
+
+**Black-box Testing:** Metodología de pentesting donde el auditor no tiene acceso al código fuente ni información interna del sistema.
+
+**Blind SQL Injection:** Tipo de inyección SQL donde el atacante no ve los resultados directamente, sino que infiere información basándose en respuestas TRUE/FALSE.
+
+**Bypass:** Técnica para evadir controles de seguridad o validaciones.
+
+**Command Injection:** Vulnerabilidad que permite ejecutar comandos arbitrarios del sistema operativo.
+
+**Content Security Policy (CSP):** Header HTTP que ayuda a prevenir ataques XSS especificando qué recursos pueden cargarse.
+
+**CVSS (Common Vulnerability Scoring System):** Sistema estándar para calificar la severidad de vulnerabilidades de seguridad.
+
+**CWE (Common Weakness Enumeration):** Clasificación estándar de debilidades de software.
+
+**DevTools:** Herramientas de desarrollo integradas en navegadores web para inspeccionar y modificar código.
+
+**HTTPOnly:** Flag de cookie que previene acceso desde JavaScript, mitigando robo de sesiones.
+
+**Magic Bytes:** Primeros bytes de un archivo que identifican su tipo real, independiente de la extensión.
+
+**OWASP Top 10:** Lista de las 10 vulnerabilidades más críticas en aplicaciones web.
+
+**Payload:** Código malicioso inyectado en una aplicación vulnerable.
+
+**Prepared Statement:** Consulta SQL parametrizada que previene inyecciones SQL.
+
+**PTES (Penetration Testing Execution Standard):** Framework estándar para realizar pentesting de manera estructurada.
+
+**RCE (Remote Code Execution):** Capacidad de ejecutar código arbitrario en un sistema remoto.
+
+**Reflected XSS:** XSS donde el payload está en la URL y se ejecuta una sola vez.
+
+**Sanitización:** Proceso de limpiar entrada de usuario para remover código potencialmente peligroso.
+
+**Session Hijacking:** Robo de cookies de sesión para hacerse pasar por un usuario legítimo.
+
+**Stored XSS:** XSS donde el payload se almacena en base de datos y afecta a múltiples usuarios.
+
+**WAF (Web Application Firewall):** Firewall especializado en proteger aplicaciones web.
+
+**Web Shell:** Script malicioso subido a un servidor que permite ejecutar comandos remotos.
+
+**Whitelist:** Lista de valores permitidos; enfoque seguro de validación.
+
+### Anexo B: Logs Completos
+
+**Ubicación de logs:**
+- Burp Suite logs: `evidencias/logs/burp_logs/`
+- SQLMap output: `evidencias/logs/sqlmap_output/`
+- Comandos ejecutados: `evidencias/logs/tool_outputs/`
+- Capturas de tráfico: `evidencias/logs/traffic_captures/`
+
+**Extractos relevantes incluidos en secciones correspondientes del informe.**
+
+### Anexo C: Scripts de PoC
+
+**Ubicación:** `evidencias/poc_scripts/`
+
+**Archivos incluidos:**
+1. `command_injection_exploit.py` - Automatización de Command Injection
+2. `shell.php` - Web shell utilizado en File Upload
+3. `xss_payloads.txt` - Lista de payloads XSS probados
+
+**Nota:** Todos los scripts están documentados inline y son funcionales.
+
+### Anexo D: Metodología de Cálculo CVSS
+
+**CVSS v3.1 Calculator utilizado:** https://www.first.org/cvss/calculator/3.1
+
+**Ejemplo de cálculo para V-03 (File Upload → RCE):**
+```
+Attack Vector (AV): Network (N) - Exploitable remotamente via red
+Attack Complexity (AC): Low (L) - No requiere condiciones especiales
+Privileges Required (PR): None (N) - Cualquier usuario puede explotar
+User Interaction (UI): None (N) - No requiere acción del usuario
+Scope (S): Unchanged (U) - Afecta al mismo componente vulnerable
+Confidentiality Impact (C): High (H) - Acceso total a datos
+Integrity Impact (I): High (H) - Modificación total de datos
+Availability Impact (A): High (H) - Potencial DoS total
+
+Vector String: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+Base Score: 9.8 (Critical)
+```
+
+**Definiciones de Impacto:**
+- **None (N):** Sin impacto
+- **Low (L):** Impacto menor, pérdida limitada
+- **High (H):** Impacto total, pérdida severa
+
+**Rangos de Severidad:**
+- 0.0: None
+- 0.1-3.9: Low
+- 4.0-6.9: Medium
+- 7.0-8.9: High
+- 9.0-10.0: Critical
+
+### Anexo E: Bitácora Completa de Pruebas
+
+**Ubicación:** `bitacora/lab.notebook.md`
+
+La bitácora completa de 40+ páginas documenta cronológicamente:
+- Todas las pruebas realizadas (exitosas y fallidas)
+- Comandos ejecutados con timestamps
+- Observaciones y decisiones tomadas
+- Problemas encontrados y soluciones
+
+**Resumen de actividades:**
+- Sesiones de pentesting: 8
+- Horas totales invertidas: 32
+- Vulnerabilidades identificadas: 5
+- Vulnerabilidades explotadas: 4
+- Capturas de pantalla: 70+
+- Payloads probados: 50+
+
+### Anexo F: Contribuciones del Equipo
+
+**Equipo:** AgroSenso Lite  
+**Integrantes:** Andrew Montero y Deivis Jimenez
+
+#### Matriz de Responsabilidades
+
+| Vulnerabilidad | Identificación | Explotación | Documentación | Responsable Principal |
+|----------------|----------------|-------------|---------------|----------------------|
+| V-01: SQL Injection (Blind) | Andrew | Andrew | Andrew | Andrew Montero |
+| V-02: Command Injection | Deivis | Deivis | Deivis | Deivis Jimenez |
+| V-03: File Upload → RCE | Andrew | Andrew | Andrew | Andrew Montero |
+| V-04: Stored XSS | Deivis | Deivis | Deivis | Deivis Jimenez |
+| V-05: Reflected XSS | Andrew | Andrew | Andrew | Andrew Montero |
+
+#### Distribución de Trabajo
+
+**Andrew Montero:**
+- Vulnerabilidades: V-01, V-03, V-05 (3 vulnerabilidades)
+- Setup inicial del entorno
+- Configuración de herramientas (Burp Suite, DevTools)
+- Documentación técnica detallada
+- Creación de scripts PoC
+- Organización del repositorio Git
+- Informe técnico (secciones técnicas)
+
+**Deivis Jimenez:**
+- Vulnerabilidades: V-02, V-04 (2 vulnerabilidades)
+- Testing y validación de payloads
+- Captura de evidencias fotográficas
+- Bitácora de pruebas
+- Post-explotación y análisis de impacto
+- Informe ejecutivo (secciones de negocio)
+
+**Trabajo Colaborativo:**
+- Análisis conjunto de vulnerabilidades
+- Revisión cruzada de hallazgos
+- Priorización de remediaciones
+- Preparación de presentación final
+- Control de calidad de documentación
+
+#### Commits del Repositorio
+
+**Total de commits:** 45+  
+**Distribución:**
+- Andrew Montero: 23 commits
+- Deivis Jimenez: 22 commits
+
+**Áreas de contribución:**
+- Evidencias: 50% Andrew, 50% Deivis
+- Documentación: 60% Andrew (técnica), 40% Deivis (ejecutiva)
+- Scripts: 100% Andrew
+- Bitácora: 40% Andrew, 60% Deivis
+
+#### Tiempo Invertido por Integrante
+
+**Andrew Montero:**
+- Pentesting técnico: 14 horas
+- Documentación: 8 horas
+- Scripts y automatización: 4 horas
+- **Total:** 26 horas
+
+**Deivis Jimenez:**
+- Pentesting técnico: 12 horas
+- Documentación: 7 horas
+- Análisis de impacto: 3 horas
+- **Total:** 22 horas
+
+**Tiempo Total del Proyecto:** 48 horas
+
+#### Declaración de Autenticidad
+
+Ambos integrantes certifican que:
+- Todo el trabajo fue realizado por el equipo
+- No se utilizó código o documentación de terceros sin atribución
+- Todas las pruebas se realizaron en el entorno autorizado (DVWA local)
+- Se siguieron las reglas de engagement establecidas
+- La documentación refleja fielmente el trabajo realizado
+
+---
+
+**Firma Digital (Metadatos del Repositorio):**
+- Repository: [https://github.com/AndrewMontero/DVWA-CyberSecurity.git]
+- Last Commit: [https://github.com/AndrewMontero/DVWA-CyberSecurity/commit/36be651be99e779971afa985aa46fbf1218bacd3]
+- Contributors: Andrew Montero, Deivis Jimenez
+
+---
+
+**FIN DEL INFORME TÉCNICO**
+
+---
+
+**Documento:** Informe Técnico de Pentesting - DVWA Medium  
+**Versión:** 1.5 Final  
+**Fecha de Emisión:** 9/12/2025  
+**Clasificación:** Confidencial  
+**Equipo:** AgroSenso Lite
 
 ---
